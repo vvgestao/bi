@@ -1,4 +1,4 @@
-user,password
-cliente1,Fran@1405
-cliente2,abcd
-admin,admin
+user,password,first_access
+cliente1,1234,False
+cliente2,1234,False
+admin,admin,False

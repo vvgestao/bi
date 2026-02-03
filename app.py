@@ -1,226 +1,193 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import json
 
-# --------------------------------------------------
-# CONFIGURAÇÃO DA PÁGINA
-# --------------------------------------------------
-st.set_page_config(
-    page_title="Vendas e Locações Imobiliárias",
-    layout="wide"
-)
+# ==================================================
+# CONFIG
+# ==================================================
+st.set_page_config(page_title="Master BI", layout="wide")
 
-# --------------------------------------------------
-# LOGIN (CORRIGIDO E ROBUSTO)
-# --------------------------------------------------
+# ==================================================
+# SESSION DEFAULTS
+# ==================================================
+if "logged" not in st.session_state:
+    st.session_state.logged = False
+
+for k, v in {
+    "f_corretor": "Todos",
+    "f_mes": "Todos",
+    "f_ano": "Todos"
+}.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# ==================================================
+# CONSTANTES
+# ==================================================
+ORDEM_MESES = [
+    "jan", "fev", "mar", "abr", "mai", "jun",
+    "jul", "ago", "set", "out", "nov", "dez"
+]
+
+# ==================================================
+# HELPERS
+# ==================================================
+def format_brl(valor):
+    return f"R$ {valor:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def limpar_filtros():
+    st.session_state.f_corretor = "Todos"
+    st.session_state.f_mes = "Todos"
+    st.session_state.f_ano = "Todos"
+
+# ==================================================
+# LOGIN
+# ==================================================
 def login():
-    try:
-        users = pd.read_csv("users.csv", sep=",")
-    except:
-        users = pd.read_csv("users.csv", sep=";")
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
 
-    users.columns = (
-        users.columns
-        .str.strip()
-        .str.lower()
-        .str.replace("á", "a")
-        .str.replace("ã", "a")
-        .str.replace("ç", "c")
-    )
+    with col2:
+        st.markdown(
+            "<h2 style='text-align:center;'> Bem-vindo ao <b>Master BI</b></h2>",
+            unsafe_allow_html=True
+        )
+        st.markdown(
+            "<p style='text-align:center; color:#9ca3af;'>Faça login para acessar o painel</p>",
+            unsafe_allow_html=True
+        )
 
-    st.title("🔐 Acesso ao Portal")
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    user_input = st.text_input("Usuário")
-    password_input = st.text_input("Senha", type="password")
+        user = st.text_input("Usuário")
+        password = st.text_input("Senha", type="password")
 
-    if st.button("Entrar"):
-        if "user" not in users.columns or "password" not in users.columns:
-            st.error(f"Erro no users.csv. Colunas encontradas: {list(users.columns)}")
-            st.stop()
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        valid = users[
-            (users["user"].astype(str) == user_input) &
-            (users["password"].astype(str) == password_input)
-        ]
+        if st.button("Entrar", use_container_width=True):
+            if user and password:
+                st.session_state.logged = True
+                st.session_state.user = user
+                st.rerun()
+            else:
+                st.error("Usuário ou senha inválidos")
 
-        if not valid.empty:
-            st.session_state["logged"] = True
-            st.session_state["user"] = user_input
-            st.success("Login realizado com sucesso")
-            st.rerun()
-        else:
-            st.error("Usuário ou senha inválidos")
-
-# --------------------------------------------------
+# ==================================================
 # DASHBOARD
-# --------------------------------------------------
+# ==================================================
 def dashboard():
-    st.markdown("## 📊 Vendas e Locações Imobiliárias")
+    st.markdown(f"## Bem-vindo de volta, **{st.session_state.user}**")
+    st.caption("Visão geral do desempenho comercial")
     st.markdown("---")
 
     uploaded_file = st.file_uploader(
-        "📤 Envie o Excel padrão",
+        "📤 Envie sua base de dados",
         type=["xlsx"]
     )
 
     if uploaded_file is None:
-        st.info("Envie o Excel para visualizar o dashboard")
+        st.info("Envie um Excel para visualizar o dashboard")
         return
 
-    df = pd.read_excel(uploaded_file)
+    # ---------------- BASE ----------------
+    df_base = pd.read_excel(uploaded_file).fillna(0)
+    df_base["mes"] = df_base["mes"].str.lower()
 
-    # --------------------------------------------------
-    # FILTROS
-    # --------------------------------------------------
-    col1, col2, col3 = st.columns(3)
+    # ---------------- SIDEBAR ----------------
+    with st.sidebar:
+        st.markdown("## Master BI")
+        st.markdown("---")
+        st.markdown("Filtros")
 
-    with col1:
-        vendedor = st.selectbox(
-            "Vendedor",
-            ["Todos"] + sorted(df["vendedor"].unique())
+        st.selectbox(
+            "Corretor",
+            ["Todos"] + sorted(df_base["vendedor"].unique()),
+            key="f_corretor"
         )
 
-    with col2:
-        mes = st.selectbox(
+        st.selectbox(
             "Mês",
-            ["Todos"] + sorted(df["mes"].unique())
+            ["Todos"] + ORDEM_MESES,
+            key="f_mes"
         )
 
-    with col3:
-        ano = st.selectbox(
+        st.selectbox(
             "Ano",
-            sorted(df["ano"].unique())
+            ["Todos"] + sorted(df_base["ano"].astype(str).unique()),
+            key="f_ano"
         )
 
-    if vendedor != "Todos":
-        df = df[df["vendedor"] == vendedor]
+        st.button(
+            "Limpar filtros",
+            use_container_width=True,
+            on_click=limpar_filtros
+        )
 
-    if mes != "Todos":
-        df = df[df["mes"] == mes]
+        st.markdown("---")
+        st.markdown(f"👤 **{st.session_state.user}**")
 
-    df = df[df["ano"] == ano]
+        if st.button("Sair", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
 
-    # --------------------------------------------------
-    # KPIs
-    # --------------------------------------------------
-    faturamento = df["faturamento"].sum()
-    tempo_medio = int(df["tempo_fechamento"].mean())
-    visitas = round(df["visitas"].mean(), 1)
-    conversao = round(df["conversao"].mean() * 100, 1)
+    # ---------------- APLICA FILTROS ----------------
+    df = df_base.copy()
 
+    if st.session_state.f_corretor != "Todos":
+        df = df[df["vendedor"] == st.session_state.f_corretor]
+
+    if st.session_state.f_mes != "Todos":
+        df = df[df["mes"] == st.session_state.f_mes]
+
+    if st.session_state.f_ano != "Todos":
+        df = df[df["ano"].astype(str) == st.session_state.f_ano]
+
+    if df.empty:
+        st.warning("Nenhum dado encontrado para os filtros selecionados.")
+        return
+
+    # ---------------- KPIs ----------------
     k1, k2, k3, k4 = st.columns(4)
 
-    k1.metric("Faturamento Bruto", f"R$ {faturamento:,.0f}".replace(",", "."))
-    k2.metric("Tempo Médio até fechamento", f"{tempo_medio} dias")
-    k3.metric("Nº médio de visitas", visitas)
-    k4.metric("Taxa de conversão", f"{conversao}%")
+    k1.metric("Faturamento", format_brl(df["faturamento"].sum()))
+    k2.metric("Vendas", (df["tipo"] == "Venda").sum())
+    k3.metric("Locações", (df["tipo"] == "Locação").sum())
+    k4.metric("Conversão", f"{round(df['conversao'].mean()*100,1)}%")
 
     st.markdown("---")
 
-    # --------------------------------------------------
-    # GRÁFICOS
-    # --------------------------------------------------
-    g1, g2, g3 = st.columns([1, 2, 1])
-
-    # DONUT
-    with g1:
-        venda = df[df["tipo"] == "Venda"].shape[0]
-        locacao = df[df["tipo"] == "Locação"].shape[0]
-
-        fig_donut = px.pie(
-            names=["Venda", "Locação"],
-            values=[venda, locacao],
-            hole=0.7
-        )
-        st.plotly_chart(fig_donut, use_container_width=True)
-
-    # FATURAMENTO MENSAL
-    with g2:
-        fig_bar = px.bar(
-            df,
-            x="mes",
-            y="faturamento",
-            color="tipo",
-            barmode="group"
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
-
-    # MAPA POR UF (GEOJSON)
-    with g3:
-        with open("brazil_states.geojson", encoding="utf-8") as f:
-            geojson = json.load(f)
-
-        df_map = (
-            df.groupby("uf", as_index=False)
-            .agg(faturamento=("faturamento", "sum"))
-        )
-
-        fig_map = px.choropleth(
-            df_map,
-            geojson=geojson,
-            locations="uf",
-            featureidkey="properties.sigla",
-            color="faturamento",
-            color_continuous_scale="Blues",
-            scope="south america",
-            title="Faturamento por UF"
-        )
-
-        fig_map.update_geos(fitbounds="locations", visible=False)
-        fig_map.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
-
-        st.plotly_chart(fig_map, use_container_width=True)
-
-    # --------------------------------------------------
-    # FUNIL
-    # --------------------------------------------------
-    funnel = df[["interesse", "visita", "proposta", "contrato"]].sum()
-
-    fig_funil = px.bar(
-        x=funnel.values,
-        y=funnel.index,
-        orientation="h",
-        title="Funil de Negócios"
+    # ---------------- GRÁFICO ----------------
+    fig = px.bar(
+        df,
+        x="mes",
+        y="faturamento",
+        color="tipo",
+        barmode="group",
+        title="Faturamento por Vendas e Locações",
+        category_orders={"mes": ORDEM_MESES}
     )
-    st.plotly_chart(fig_funil, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-    # --------------------------------------------------
-    # ORIGEM DOS LEADS
-    # --------------------------------------------------
-    origem = df.groupby("origem")["id"].count().reset_index()
+    st.markdown("---")
 
-    fig_origem = px.bar(
-        origem,
-        x="id",
-        y="origem",
-        orientation="h",
-        title="Origem dos Leads"
-    )
-    st.plotly_chart(fig_origem, use_container_width=True)
-
-    # --------------------------------------------------
-    # TABELA
-    # --------------------------------------------------
-    st.markdown("### 📋 Desempenho por Vendedor")
+    # ---------------- TABELA CORRETORES ----------------
+    st.markdown("### 📋 Desempenho por Corretor")
 
     tabela = df.groupby("vendedor").agg(
         faturamento=("faturamento", "sum"),
-        fechamento=("tempo_fechamento", "mean"),
         conversao=("conversao", "mean")
     ).reset_index()
 
-    tabela["conversao"] = (tabela["conversao"] * 100).round(1)
+    tabela.columns = ["Corretor", "Faturamento", "Conversão (%)"]
+    tabela["Faturamento"] = tabela["Faturamento"].apply(format_brl)
+    tabela["Conversão (%)"] = (tabela["Conversão (%)"] * 100).round(1)
 
     st.dataframe(tabela, use_container_width=True)
 
-# --------------------------------------------------
-# CONTROLE DE SESSÃO
-# --------------------------------------------------
-if "logged" not in st.session_state:
-    st.session_state["logged"] = False
-
-if not st.session_state["logged"]:
+# ==================================================
+# RENDER
+# ==================================================
+if not st.session_state.logged:
     login()
 else:
     dashboard()
