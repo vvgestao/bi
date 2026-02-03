@@ -49,7 +49,7 @@ def login():
 
     with col2:
         st.markdown(
-            "<h2 style='text-align:center;'> Bem-vindo ao <b>Master BI</b></h2>",
+            "<h2 style='text-align:center;'>Bem-vindo ao <b>Master BI</b></h2>",
             unsafe_allow_html=True
         )
         st.markdown(
@@ -156,8 +156,8 @@ def dashboard():
 
     st.markdown("---")
 
-    # ---------------- GRÁFICO ----------------
-    fig = px.bar(
+    # ---------------- GRÁFICO FATURAMENTO ----------------
+    fig_fat = px.bar(
         df,
         x="mes",
         y="faturamento",
@@ -166,7 +166,70 @@ def dashboard():
         title="Faturamento por Vendas e Locações",
         category_orders={"mes": ORDEM_MESES}
     )
-    st.plotly_chart(fig, use_container_width=True)
+
+    fig_fat.update_traces(
+        hovertemplate="<b>%{legendgroup}</b><br>Faturamento: R$ %{y:,.0f}<extra></extra>"
+    )
+
+    st.plotly_chart(fig_fat, use_container_width=True)
+
+    st.markdown("---")
+
+    # ---------------- ROSCA + FUNIL ----------------
+    c1, c2 = st.columns(2)
+
+    with c1:
+        donut_df = df["tipo"].value_counts().reset_index()
+        donut_df.columns = ["Tipo", "Quantidade"]
+
+        fig_donut = px.pie(
+            donut_df,
+            names="Tipo",
+            values="Quantidade",
+            hole=0.6,
+            title="Quantidade de Imóveis por Tipo"
+        )
+        fig_donut.update_traces(textinfo="label+value")
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+    with c2:
+        funil_df = pd.DataFrame({
+            "Etapa": ["Interesse", "Visitas", "Proposta", "Contrato"],
+            "Quantidade": [
+                df["interesse"].sum(),
+                df["visitas"].sum(),
+                df["proposta"].sum(),
+                df["contrato"].sum()
+            ]
+        })
+
+        fig_funil = px.bar(
+            funil_df,
+            x="Quantidade",
+            y="Etapa",
+            orientation="h",
+            text="Quantidade",
+            title="Funil Comercial"
+        )
+        fig_funil.update_layout(yaxis=dict(autorange="reversed"))
+        st.plotly_chart(fig_funil, use_container_width=True)
+
+    st.markdown("---")
+
+    # ---------------- ORIGEM ----------------
+    origem_df = df.groupby(["origem", "tipo"]).size().reset_index(name="Quantidade")
+
+    fig_origem = px.bar(
+        origem_df,
+        x="origem",
+        y="Quantidade",
+        color="tipo",
+        barmode="stack",
+        title="Quantidade de Imóveis por Origem",
+        text_auto=True
+    )
+
+    st.plotly_chart(fig_origem, use_container_width=True)
 
     st.markdown("---")
 
@@ -191,6 +254,12 @@ if not st.session_state.logged:
     login()
 else:
     dashboard()
+
+
+
+
+
+
 
 
 
